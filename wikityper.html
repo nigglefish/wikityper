@@ -295,9 +295,10 @@
         return `
           <section class="bookmarklet-help">
             <h2>Create a Wikityper bookmarklet</h2>
+            <p>You can create a bookmarklet that will allow you to use any Wikipedia article just by selecting a bookmark in your borswer.</p>
             <p>Bookmark this page, then edit the bookmark. Change its name to <strong>Wikityper</strong> and replace its URL with this code:</p>
             <textarea readonly spellcheck="false" onclick="this.select()">${escapeHtml(bookmarklet)}</textarea>
-            <p>After that, open any page and click the <strong>Wikityper</strong> bookmark. It will redirect here with that page's URL in <code>wiki=</code>.</p>
+            <p>After that, open any Wikipedia article and click the <strong>Wikityper</strong> bookmark.</p>
           </section>
         `;
       };
@@ -313,7 +314,7 @@
       const showSetupError = () => {
         showMessage(
           "Wikityper needs a Wikipedia page",
-          `<p>Add a <code>wiki=</code> parameter with the URL of the Wikipedia article to type, or paste a Wikipedia article URL below.</p>${wikiPicker()}`
+          `<p>Add a <code>wiki=</code> parameter with the URL of a Wikipedia article, or paste a Wikipedia article URL below.</p>${wikiPicker()}`
         );
       };
 
