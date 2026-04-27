@@ -170,8 +170,8 @@
       opacity: .45;
     }
 
-    #wikityper-panel:hover,
-    #wikityper-panel:focus-within,
+    #wikityper-panel:not(.retracted):hover,
+    #wikityper-panel:not(.retracted):focus-within,
     #wikityper-panel.open {
       transform: translateX(.8em);
       opacity: 1;
@@ -581,7 +581,14 @@
 
       gear.addEventListener("click", e => {
         e.stopPropagation();
-        panel.classList.toggle("open");
+        panel.classList.remove("open");
+        panel.classList.add("retracted");
+        input.blur();
+        box.focus();
+      });
+
+      panel.addEventListener("mouseleave", () => {
+        panel.classList.remove("open", "retracted");
       });
 
       reset.addEventListener("click", e => {
