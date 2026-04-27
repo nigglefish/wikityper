@@ -340,12 +340,12 @@
         }
 
         if (!/\.wikipedia\.org$/i.test(url.hostname)) {
-          throw new Error("The wiki parameter must point to a wikipedia.org article URL.");
+          throw new Error("The wiki parameter must point to a Wikipedia article URL.");
         }
 
         const match = url.pathname.match(/^\/wiki\/(.+)$/);
         if (!match) {
-          throw new Error("The <code>wiki=</code> parameter must point to a normal Wikipedia article URL.");
+          throw new Error("The wiki parameter must point to a Wikipedia article URL.");
         }
 
         const title = decodeURIComponent(match[1]).replace(/_/g, " ");
