@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wikityper</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --green-bg: rgba(46, 204, 113, .35);
+      --green-fg: #096b2e;
+      --red-bg: rgba(231, 76, 60, .32);
+      --red-fg: #7b1111;
+      --err-bg: #e00;
+      --err-fg: #fff;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #fff;
+      color: #111;
+      font: 18px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      display: block;
+      max-width: 75ch;
+      margin: 2rem auto;
+      padding: 0 2rem 4rem;
+      outline: 0;
+    }
+
+    h1 {
+      font-size: 2.3rem;
+      line-height: 1.15;
+      margin: 0 0 1rem;
+    }
+
+    h2 {
+      font-size: 1.7rem;
+      line-height: 1.25;
+      margin: 2rem 0 .75rem;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: .25rem;
+    }
+
+    h3 {
+      font-size: 1.35rem;
+      line-height: 1.3;
+      margin: 1.5rem 0 .5rem;
+    }
+
+    h4,
+    h5,
+    h6 {
+      font-size: 1.1rem;
+      line-height: 1.35;
+      margin: 1.25rem 0 .4rem;
+    }
+
+    p {
+      margin: 0 0 1em;
+      white-space: normal;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .message {
+      max-width: 60ch;
+      margin: 4rem auto;
+      padding: 0 2rem;
+    }
+
+    .message h1 {
+      margin-bottom: .5rem;
+    }
+
+    .message code {
+      background: #f2f2f2;
+      border-radius: .35em;
+      padding: .1em .3em;
+    }
+
+    .wiki-picker {
+      display: flex;
+      gap: .5rem;
+      margin-top: 1.25rem;
+    }
+
+    .wiki-picker input {
+      flex: 1;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: .55rem .7rem;
+      border: 1px solid #bbb;
+      border-radius: .55rem;
+      font: inherit;
+    }
+
+    .wiki-picker button {
+      cursor: pointer;
+      padding: .55rem .9rem;
+      border: 1px solid #111;
+      border-radius: .55rem;
+      background: #111;
+      color: #fff;
+      font: inherit;
+    }
+
+    .mark-space {
+      display: inline;
+    }
+
+    #wikityper-panel {
+      display: grid;
+      grid-template-columns: 2em 8em 2em 2em;
+      gap: 0;
+      align-items: center;
+      justify-items: right;
+      position: fixed;
+      right: 0;
+      top: .5em;
+      z-index: 2147483647;
+      width: 15em;
+      padding: .3em;
+      border-radius: 1em 0 0 1em;
+      background: #000;
+      color: #fff;
+      box-shadow: 0 .55em 1.7em rgba(0, 0, 0, .24);
+      font: 14px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      backdrop-filter: blur(.7em);
+      overflow: hidden;
+      transition: transform .22s ease, opacity .22s ease;
+      transform: translateX(12.8em);
+      opacity: .45;
+    }
+
+    #wikityper-panel:hover,
+    #wikityper-panel:focus-within,
+    #wikityper-panel.open {
+      transform: translateX(.8em);
+      opacity: 1;
+    }
+
+    #wikityper-panel input {
+      width: 90%;
+      box-sizing: border-box;
+      padding: .3em;
+      border: 0;
+      border-radius: .6em;
+      font-size: 1.1em;
+      background: #fff;
+      color: #000;
+      outline: none;
+    }
+
+    #wikityper-panel button {
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      color: #fff;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      line-height: 1;
+    }
+
+    #wikityper-panel .gear {
+      top: -.04em;
+      font-size: 2em;
+    }
+
+    #wikityper-panel .reset {
+      top: -.04em;
+      font-size: 1.8em;
+    }
+
+    #wikityper-panel .close {
+      top: -.08em;
+      font-size: 2em;
+    }
+  </style>
+</head>
+<body>
+  <main id="wikityper-text" tabindex="-1">
+    <p>Loading text-only Wikipedia article…</p>
+  </main>
+
+  <aside id="wikityper-panel" aria-label="Wikityper options">
+    <button class="gear" type="button" aria-label="Options">⛭</button>
+    <input id="speed" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="speed…" autocomplete="off">
+    <button class="reset" type="button" aria-label="Reset">↻</button>
+    <button class="close" type="button" aria-label="Open original Wikipedia page">×</button>
+  </aside>
+
+  <script>
+    (() => {
+      const DEFAULT_SPEED = 200;
+      const START_DELAY = 5;
+      const SPEED_KEY = "wikityper.speed";
+      const NL = String.fromCharCode(10);
+
+      const d = document;
+      const box = d.getElementById("wikityper-text");
+      const panel = d.getElementById("wikityper-panel");
+      const input = d.getElementById("speed");
+      const gear = panel.querySelector(".gear");
+      const reset = panel.querySelector(".reset");
+      const close = panel.querySelector(".close");
+
+      let spans = [];
+      let target = [];
+      let startAt = 0;
+      let pos = 0;
+      let red = -1;
+      let dangers = new Set();
+      let started = false;
+      let waiting = false;
+      let waitAt = -1;
+      let redTimer = 0;
+      let originalWikiUrl = "";
+
+      const clearTimer = () => {
+        if (redTimer) clearTimeout(redTimer);
+        redTimer = 0;
+      };
+
+      const clamp = (n, a, b) => Math.max(a, Math.min(n, b));
+      const clean = t => String(t || "").replace(/\s+/g, " ").trim();
+      const storedSpeed = () => localStorage.getItem(SPEED_KEY) || String(DEFAULT_SPEED);
+
+      input.value = storedSpeed();
+
+      const saveSpeed = () => {
+        input.value = [...input.value].filter(c => c >= "0" && c <= "9").join("");
+        localStorage.setItem(SPEED_KEY, input.value || String(DEFAULT_SPEED));
+      };
+
+      const unit = () => 60000 / Math.max(1, parseInt(input.value, 10) || DEFAULT_SPEED);
+
+      const schedule = n => {
+        clearTimer();
+        redTimer = setTimeout(tick, n * unit());
+      };
+
+      const escapeHtml = value => String(value).replace(/[&<>"]/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;"
+      })[ch]);
+
+      const showMessage = (title, html) => {
+        clearTimer();
+        box.className = "message";
+        box.innerHTML = `<h1>${escapeHtml(title)}</h1>${html}`;
+      };
+
+      const wikiPicker = (value = "https://en.wikipedia.org/wiki/Typing") => `
+        <form class="wiki-picker" id="wiki-picker">
+          <input name="wiki" type="url" value="${escapeHtml(value)}" aria-label="Wikipedia article URL" required>
+          <button type="submit">Go</button>
+        </form>
+      `;
+
+      const showSetupError = () => {
+        showMessage(
+          "Wikityper needs a Wikipedia page",
+          `<p>Add a <code>wiki=</code> parameter with the URL of the Wikipedia article to type, or paste a Wikipedia article URL below.</p>${wikiPicker()}`
+        );
+      };
+
+      const parseWikiUrl = () => {
+        const raw = new URLSearchParams(location.search).get("wiki");
+        if (!raw) return null;
+
+        let url;
+        try {
+          url = new URL(raw);
+        } catch (_) {
+          try {
+            url = new URL(raw, "https://en.wikipedia.org");
+          } catch (err) {
+            throw new Error("The wiki parameter is not a valid URL.");
+          }
+        }
+
+        if (!/\.wikipedia\.org$/i.test(url.hostname)) {
+          throw new Error("The wiki parameter must point to a wikipedia.org article URL.");
+        }
+
+        const match = url.pathname.match(/^\/wiki\/(.+)$/);
+        if (!match) {
+          throw new Error("The wiki parameter must point to a normal Wikipedia article URL, such as /wiki/Venus.");
+        }
+
+        const title = decodeURIComponent(match[1]).replace(/_/g, " ");
+        originalWikiUrl = url.href;
+
+        return {
+          title,
+          api: `${url.origin}/w/api.php?action=query&format=json&origin=*&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=${encodeURIComponent(title)}`
+        };
+      };
+
+      const buildBlocks = page => {
+        const blocks = [{ level: 1, text: page.title || "Wikipedia article" }];
+        let para = [];
+
+        const flush = () => {
+          const t = clean(para.join(" "));
+          if (t) blocks.push({ level: 0, text: t });
+          para = [];
+        };
+
+        String(page.extract || "No plain-text extract found.").split(/\n/).forEach(line => {
+          const m = line.match(/^(={1,6})\s*(.*?)\s*\1$/);
+          if (m) {
+            flush();
+            blocks.push({ level: Math.min(m[1].length + 1, 6), text: m[2] });
+          } else if (line.trim() === "") {
+            flush();
+          } else {
+            para.push(line);
+          }
+        });
+
+        flush();
+        return blocks;
+      };
+
+      const clearMark = s => {
+        if (s._mark) {
+          s._mark.remove();
+          s._mark = null;
+        }
+      };
+
+      const clearSpan = i => {
+        const s = spans[i];
+        if (!s) return;
+        s.textContent = s.dataset.ch;
+        clearMark(s);
+        s.style.background = "";
+        s.style.color = "";
+      };
+
+      const clearAllMarks = () => spans.forEach((_, i) => clearSpan(i));
+
+      const addMark = (s, bg, fg) => {
+        if (!s._mark) {
+          s._mark = d.createElement("span");
+          s._mark.className = "mark-space";
+          s._mark.textContent = "\u00a0";
+          const p = spans[+s.dataset.i - 1];
+          if (p && p.parentNode) p.parentNode.insertBefore(s._mark, p.nextSibling);
+          else s.parentNode.insertBefore(s._mark, s);
+        }
+        s._mark.style.cssText = `background:${bg};color:${fg}`;
+      };
+
+      const paintSpan = i => {
+        const s = spans[i];
+        if (!s) return;
+        clearSpan(i);
+
+        if (dangers.has(i) && i >= startAt) {
+          if (target[i] === NL) addMark(s, "var(--err-bg)", "var(--err-fg)");
+          else {
+            s.style.background = "var(--err-bg)";
+            s.style.color = "var(--err-fg)";
+          }
+        } else if (i >= startAt && i <= red) {
+          if (target[i] !== NL) {
+            s.style.background = "var(--red-bg)";
+            s.style.color = "var(--red-fg)";
+          }
+        } else if (i >= startAt && i < pos) {
+          s.style.background = "var(--green-bg)";
+          s.style.color = "var(--green-fg)";
+        }
+      };
+
+      const paintRange = (a, b) => {
+        for (let i = Math.max(0, a); i <= Math.min(b, target.length - 1); i++) paintSpan(i);
+      };
+
+      const put = (parent, ch) => {
+        const s = d.createElement("span");
+        s.textContent = ch;
+        s.dataset.ch = ch;
+        s.dataset.i = spans.length;
+        parent.appendChild(s);
+        spans.push(s);
+        target.push(ch);
+      };
+
+      const enter = () => put(box, NL);
+
+      const addBlock = (b, i, blocks) => {
+        const el = d.createElement(b.level ? `h${b.level}` : "p");
+        clean(b.text).split("").forEach(ch => put(el, ch));
+        box.appendChild(el);
+        if (i < blocks.length - 1) enter();
+      };
+
+      const renderBlocks = blocks => {
+        spans = [];
+        target = [];
+        box.className = "";
+        box.innerHTML = "";
+        blocks.forEach((b, i) => addBlock(b, i, blocks));
+      };
+
+      const catchPlayer = () => {
+        const i = Math.max(startAt, Math.min(pos - 1, target.length - 1));
+        dangers.add(i);
+        red = i;
+        waiting = true;
+        waitAt = i;
+        clearTimer();
+        paintSpan(i);
+      };
+
+      const advanceChaser = () => {
+        if (waiting || pos <= startAt || pos > target.length) return;
+        if (red < pos - 1) {
+          red++;
+          paintSpan(red);
+          if (red >= pos - 1) catchPlayer();
+        }
+      };
+
+      function tick() {
+        redTimer = 0;
+        advanceChaser();
+        if (!waiting && red < pos - 1) schedule(1);
+      }
+
+      const start = () => {
+        if (!started) {
+          started = true;
+          schedule(START_DELAY);
+        }
+      };
+
+      const resetGame = (at = 0, scroll = false) => {
+        clearTimer();
+        clearAllMarks();
+        startAt = clamp(at, 0, target.length);
+        pos = startAt;
+        red = startAt - 1;
+        started = false;
+        waiting = false;
+        waitAt = -1;
+        dangers.clear();
+        if (scroll) scrollTo({ top: 0, behavior: "smooth" });
+        box.focus();
+      };
+
+      const keepUp = () => {
+        const s = spans[pos];
+        if (!s) return;
+        const r = s.getBoundingClientRect();
+        if (r.bottom > innerHeight * .9) scrollBy({ top: r.bottom - innerHeight * .72, behavior: "smooth" });
+      };
+
+      const advancePlayer = run => {
+        const old = pos;
+        if (run) {
+          pos += run;
+          paintRange(old, pos - 1);
+        } else {
+          pos++;
+          paintSpan(old);
+        }
+
+        if (red >= pos) {
+          const oldRed = red;
+          red = pos - 1;
+          paintRange(red + 1, oldRed);
+        }
+
+        keepUp();
+        if (waiting) {
+          waiting = false;
+          waitAt = -1;
+          schedule(START_DELAY);
+        } else {
+          start();
+        }
+      };
+
+      const typable = ch => ch && ch.length === 1 && ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126;
+      const ws = ch => ch !== "" && String(ch).trim() === "";
+      const got = e => e.key === "Enter" ? NL : e.key === "Tab" ? String.fromCharCode(9) : e.key === " " || e.key === "Spacebar" ? " " : e.key.length === 1 ? e.key : null;
+      const wsRun = i => {
+        let j = i;
+        while (ws(target[j])) j++;
+        return j - i;
+      };
+      const matches = (exp, g, run) => run ? exp === " " ? g === " " : exp === NL ? g === NL : ws(g) : (!typable(exp) && g) || g === exp;
+
+      const keyHandler = e => {
+        if (d.activeElement === input || e.metaKey || e.ctrlKey || e.altKey) return;
+        const exp = target[pos];
+        const g = got(e);
+        if (exp == null || !g) return;
+
+        e.preventDefault();
+        const run = ws(exp) ? wsRun(pos) : 0;
+        if (matches(exp, g, run)) advancePlayer(run);
+        else advanceChaser();
+      };
+
+      input.addEventListener("input", saveSpeed);
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveSpeed();
+          panel.classList.remove("open");
+          input.blur();
+          box.focus();
+        }
+      });
+
+      gear.addEventListener("click", e => {
+        e.stopPropagation();
+        panel.classList.toggle("open");
+      });
+
+      reset.addEventListener("click", e => {
+        e.stopPropagation();
+        resetGame(0, true);
+      });
+
+      close.addEventListener("click", e => {
+        e.stopPropagation();
+        if (originalWikiUrl) location.href = originalWikiUrl;
+        else location.href = "https://en.wikipedia.org/";
+      });
+
+      box.addEventListener("click", e => {
+        const s = e.target.closest && e.target.closest("span[data-i]");
+        if (s && box.contains(s)) resetGame(+s.dataset.i, false);
+      });
+
+      d.addEventListener("keydown", keyHandler, true);
+
+      box.addEventListener("submit", e => {
+        if (!e.target.matches("#wiki-picker")) return;
+        e.preventDefault();
+        const url = new URL(location.href);
+        url.search = `?wiki=${encodeURIComponent(new FormData(e.target).get("wiki"))}`;
+        location.href = url.href;
+      });
+
+      const load = async () => {
+        let parsed;
+        try {
+          parsed = parseWikiUrl();
+        } catch (err) {
+          showMessage("Could not load Wikipedia article", `<p>${escapeHtml(err.message)}</p>`);
+          return;
+        }
+
+        if (!parsed) {
+          showSetupError();
+          return;
+        }
+
+        try {
+          const response = await fetch(parsed.api);
+          if (!response.ok) throw new Error(`Wikipedia API returned HTTP ${response.status}.`);
+
+          const json = await response.json();
+          if (!json.query || !json.query.pages) {
+            throw new Error("This page did not return a readable MediaWiki article. Try a normal Wikipedia article page.");
+          }
+
+          const page = Object.values(json.query.pages)[0];
+          if (!page || page.missing !== undefined) {
+            throw new Error("This Wikipedia page could not be found or read by the API.");
+          }
+
+          renderBlocks(buildBlocks(page));
+          resetGame(0, false);
+        } catch (err) {
+          showMessage(
+            "Could not load plain-text version",
+            `<p>${escapeHtml(err.message)}</p><p><a href="${escapeHtml(originalWikiUrl)}">Open the original Wikipedia page</a></p>`
+          );
+        }
+      };
+
+      load();
+    })();
+  </script>
+</body>
+</html>
