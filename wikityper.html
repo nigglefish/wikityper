@@ -111,6 +111,32 @@
       font: inherit;
     }
 
+    .bookmarklet-help {
+      margin-top: 2rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid #ddd;
+    }
+
+    .bookmarklet-help h2 {
+      margin-top: 0;
+      font-size: 1.3rem;
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .bookmarklet-help textarea {
+      display: block;
+      width: 100%;
+      min-height: 7rem;
+      box-sizing: border-box;
+      margin: .75rem 0;
+      padding: .7rem;
+      border: 1px solid #bbb;
+      border-radius: .55rem;
+      font: .9rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      resize: vertical;
+    }
+
     .mark-space {
       display: inline;
     }
@@ -260,11 +286,28 @@
         box.innerHTML = `<h1>${escapeHtml(title)}</h1>${html}`;
       };
 
+      const bookmarkletHelp = () => {
+        const wikityperUrl = new URL(location.href);
+        wikityperUrl.search = "";
+        wikityperUrl.hash = "";
+        const bookmarklet = `javascript:location.href=${JSON.stringify(wikityperUrl.href)}+'?wiki='+encodeURIComponent(location.href)`;
+
+        return `
+          <section class="bookmarklet-help">
+            <h2>Create a Wikityper bookmarklet</h2>
+            <p>Bookmark this page, then edit the bookmark. Change its name to <strong>Wikityper</strong> and replace its URL with this code:</p>
+            <textarea readonly spellcheck="false" onclick="this.select()">${escapeHtml(bookmarklet)}</textarea>
+            <p>After that, open any page and click the <strong>Wikityper</strong> bookmark. It will redirect here with that page's URL in <code>wiki=</code>.</p>
+          </section>
+        `;
+      };
+
       const wikiPicker = (value = "https://en.wikipedia.org/wiki/Typing") => `
         <form class="wiki-picker" id="wiki-picker">
           <input name="wiki" type="url" value="${escapeHtml(value)}" aria-label="Wikipedia article URL" required>
           <button type="submit">Go</button>
         </form>
+        ${bookmarkletHelp()}
       `;
 
       const showSetupError = () => {
