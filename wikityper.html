@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- This was completely written by ChatGPT using vibe coding. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -141,6 +142,10 @@
       display: inline;
     }
 
+    #wikityper-panel[hidden] {
+      display: none;
+    }
+
     #wikityper-panel {
       display: grid;
       grid-template-columns: 2em 8em 2em 2em;
@@ -216,7 +221,7 @@
     <p>Loading text-only Wikipedia article…</p>
   </main>
 
-  <aside id="wikityper-panel" aria-label="Wikityper options">
+  <aside id="wikityper-panel" aria-label="Wikityper options" hidden>
     <button class="gear" type="button" aria-label="Options">⛭</button>
     <input id="speed" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="speed…" autocomplete="off">
     <button class="reset" type="button" aria-label="Reset">↻</button>
@@ -282,6 +287,7 @@
 
       const showMessage = (title, html) => {
         clearTimer();
+        panel.hidden = true;
         box.className = "message";
         box.innerHTML = `<h1>${escapeHtml(title)}</h1>${html}`;
       };
@@ -455,6 +461,7 @@
       const renderBlocks = blocks => {
         spans = [];
         target = [];
+        panel.hidden = false;
         box.className = "";
         box.innerHTML = "";
         blocks.forEach((b, i) => addBlock(b, i, blocks));
