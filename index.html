@@ -148,7 +148,7 @@
 
     #wikityper-panel {
       display: grid;
-      grid-template-columns: 2em 8em 2em 2em;
+      grid-template-columns: 2em 8em 2em 2em 2em;
       gap: 0;
       align-items: center;
       justify-items: right;
@@ -156,7 +156,7 @@
       right: 0;
       top: .5em;
       z-index: 2147483647;
-      width: 15em;
+      width: 17em;
       padding: .3em;
       border-radius: 1em 0 0 1em;
       background: #000;
@@ -166,7 +166,7 @@
       backdrop-filter: blur(.7em);
       overflow: hidden;
       transition: transform .22s ease, opacity .22s ease;
-      transform: translateX(12.8em);
+      transform: translateX(14.8em);
       opacity: .45;
     }
 
@@ -205,14 +205,41 @@
       font-size: 2em;
     }
 
+    #wikityper-panel .keyboard-toggle {
+      font-size: 2.2em;
+      color: #777;
+    }
+
+    #wikityper-panel .keyboard-toggle[aria-pressed="true"] {
+      color: #fff;
+    }
+
     #wikityper-panel .reset {
-      top: -.04em;
-      font-size: 1.8em;
+      top: -.12em;
+      font-size: 2.2em;
     }
 
     #wikityper-panel .close {
-      top: -.08em;
-      font-size: 2em;
+      font-size: 2.2em;
+    }
+
+    #typing-keyboard {
+      position: absolute;
+      display: block;
+      height: auto;
+      z-index: 2;
+      pointer-events: none;
+      user-select: none;
+      visibility: hidden;
+    }
+
+    #typing-keyboard.ready {
+      visibility: visible;
+    }
+
+    #keyboard-reserve {
+      height: 0;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -221,9 +248,13 @@
     <p>Loading text-only Wikipedia article…</p>
   </main>
 
+  <img id="typing-keyboard" src="keyboard.png" alt="" aria-hidden="true">
+  <div id="keyboard-reserve" aria-hidden="true"></div>
+
   <aside id="wikityper-panel" aria-label="Wikityper options" hidden>
     <button class="gear" type="button" aria-label="Options">⛭</button>
     <input id="speed" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="speed…" autocomplete="off">
+    <button class="keyboard-toggle" type="button" aria-label="Keyboard off" aria-pressed="false" title="Toggle keyboard">⌨</button>
     <button class="reset" type="button" aria-label="Reset">↻</button>
     <button class="close" type="button" aria-label="Open original Wikipedia page">×</button>
   </aside>
@@ -240,8 +271,11 @@
       const panel = d.getElementById("wikityper-panel");
       const input = d.getElementById("speed");
       const gear = panel.querySelector(".gear");
+      const keyboardToggle = panel.querySelector(".keyboard-toggle");
       const reset = panel.querySelector(".reset");
       const close = panel.querySelector(".close");
+      const keyboard = d.getElementById("typing-keyboard");
+      const keyboardReserve = d.getElementById("keyboard-reserve");
 
       let spans = [];
       let target = [];
@@ -254,6 +288,9 @@
       let waitAt = -1;
       let redTimer = 0;
       let originalWikiUrl = "";
+      let keyboardEnabled = false;
+      let keyboardStarted = false;
+      let keyboardLineTop = null;
 
       const clearTimer = () => {
         if (redTimer) clearTimeout(redTimer);
@@ -288,6 +325,8 @@
       const showMessage = (title, html) => {
         clearTimer();
         panel.hidden = true;
+        keyboard.classList.remove("ready");
+        keyboardReserve.style.height = "0px";
         box.className = "message";
         box.innerHTML = `<h1>${escapeHtml(title)}</h1>${html}`;
       };
@@ -467,6 +506,53 @@
         blocks.forEach((b, i) => addBlock(b, i, blocks));
       };
 
+      const updateKeyboard = (at = pos, forceLine = false) => {
+        if (!spans.length || !keyboardEnabled || !keyboardStarted || !keyboard.classList.contains("ready")) return;
+
+        let i = Math.min(at, spans.length - 1);
+        if (target[i] === NL && i > 0) i--;
+        const s = spans[i];
+        if (!s) return;
+
+        const r = s.getBoundingClientRect();
+        const boxRect = box.getBoundingClientRect();
+        const boxStyle = getComputedStyle(box);
+        const leftPad = parseFloat(boxStyle.paddingLeft) || 0;
+        const rightPad = parseFloat(boxStyle.paddingRight) || 0;
+        const fontSize = parseFloat(getComputedStyle(box).fontSize) || 18;
+        const gap = fontSize * 3;
+        const textWidth = Math.max(0, boxRect.width - leftPad - rightPad);
+        const lineTop = Math.round(r.top + scrollY);
+
+        keyboard.style.left = `${boxRect.left + scrollX + leftPad - textWidth * 0.1}px`;
+        keyboard.style.width = `${textWidth * 1.2}px`;
+
+        // The first typing key marks the player's line. Treat that as a newly
+        // reached line, then move the keyboard only when the typing line changes.
+        if (forceLine || keyboardLineTop === null || Math.abs(lineTop - keyboardLineTop) > 2) {
+          keyboardLineTop = lineTop;
+          keyboard.style.top = `${r.bottom + scrollY + gap}px`;
+        }
+
+        const reserve = Math.ceil(keyboard.offsetHeight + gap + fontSize * 4);
+        keyboardReserve.style.height = `${Math.max(reserve, fontSize * 14)}px`;
+      };
+
+      const syncKeyboardVisibility = (at = pos, forceLine = false) => {
+        const shouldShow = keyboardEnabled && keyboardStarted && keyboard.complete && keyboard.naturalWidth;
+        keyboard.classList.toggle("ready", shouldShow);
+        if (!shouldShow) {
+          keyboardReserve.style.height = "0px";
+          return;
+        }
+        requestAnimationFrame(() => updateKeyboard(at, forceLine));
+      };
+
+      const syncKeyboardToggle = () => {
+        keyboardToggle.setAttribute("aria-pressed", String(keyboardEnabled));
+        keyboardToggle.setAttribute("aria-label", keyboardEnabled ? "Keyboard on" : "Keyboard off");
+      };
+
       const catchPlayer = () => {
         const i = Math.max(startAt, Math.min(pos - 1, target.length - 1));
         dangers.add(i);
@@ -509,8 +595,13 @@
         waiting = false;
         waitAt = -1;
         dangers.clear();
+        keyboardStarted = false;
+        keyboardLineTop = null;
+        keyboard.classList.remove("ready");
+        keyboardReserve.style.height = "0px";
         if (scroll) scrollTo({ top: 0, behavior: "smooth" });
         box.focus();
+        requestAnimationFrame(updateKeyboard);
       };
 
       const keepUp = () => {
@@ -520,7 +611,7 @@
         if (r.bottom > innerHeight * .9) scrollBy({ top: r.bottom - innerHeight * .72, behavior: "smooth" });
       };
 
-      const advancePlayer = run => {
+      const advancePlayer = (run, skipKeyboardMove = false) => {
         const old = pos;
         if (run) {
           pos += run;
@@ -537,6 +628,7 @@
         }
 
         keepUp();
+        if (!skipKeyboardMove) updateKeyboard();
         if (waiting) {
           waiting = false;
           waitAt = -1;
@@ -563,8 +655,14 @@
         if (exp == null || !g) return;
 
         e.preventDefault();
+        const firstTypingKey = !keyboardStarted;
+        if (firstTypingKey) {
+          keyboardStarted = true;
+          keyboardLineTop = null;
+          syncKeyboardVisibility(pos, true);
+        }
         const run = ws(exp) ? wsRun(pos) : 0;
-        if (matches(exp, g, run)) advancePlayer(run);
+        if (matches(exp, g, run)) advancePlayer(run, firstTypingKey);
         else advanceChaser();
       };
 
@@ -589,6 +687,15 @@
 
       panel.addEventListener("mouseleave", () => {
         panel.classList.remove("open", "retracted");
+      });
+
+      keyboardToggle.addEventListener("click", e => {
+        e.stopPropagation();
+        keyboardEnabled = !keyboardEnabled;
+        syncKeyboardToggle();
+        keyboardLineTop = null;
+        syncKeyboardVisibility(pos, true);
+        box.focus();
       });
 
       reset.addEventListener("click", e => {
@@ -616,6 +723,15 @@
         url.search = `?wiki=${encodeURIComponent(new FormData(e.target).get("wiki"))}`;
         location.href = url.href;
       });
+
+      keyboard.addEventListener("load", () => {
+        syncKeyboardVisibility(pos, true);
+      });
+      addEventListener("resize", () => {
+        keyboardLineTop = null;
+        updateKeyboard(pos, true);
+      });
+      syncKeyboardToggle();
 
       const load = async () => {
         let parsed;
